@@ -3,9 +3,21 @@ class FitnessAnalyzer {
         this.workouts = this.loadWorkoutHistory();
         this.uploadedImages = { image1: null, image2: null };
         this.claudeAPI = null;
+        this.imageStorage = new ImageStorage();
         this.initializeEventListeners();
         this.renderWorkoutHistory();
         this.checkApiKey();
+        this.initImageStorage();
+    }
+
+    async initImageStorage() {
+        try {
+            await this.imageStorage.init();
+            console.log('Image storage initialized successfully');
+        } catch (error) {
+            console.error('Failed to initialize image storage:', error);
+            this.showError('Failed to initialize image storage. Some features may not work properly.');
+        }
     }
 
     checkApiKey() {
@@ -170,7 +182,7 @@ class FitnessAnalyzer {
             const insights = await this.generateInsights(workoutData);
 
             this.displayResults(workoutData, insights);
-            this.saveWorkout(workoutData, insights);
+            await this.saveWorkout(workoutData, insights);
             this.renderWorkoutHistory();
             this.resetUploadAreas();
         } catch (error) {
@@ -355,7 +367,7 @@ class FitnessAnalyzer {
         this.checkAnalyzeButton();
     }
 
-    saveWorkout(workoutData, insights) {
+    async saveWorkout(workoutData, insights) {
         // Create a unique identifier for the workout based on date, type, and duration
         const workoutKey = `${workoutData.date}_${workoutData.workoutType}_${workoutData.duration}`;
         
@@ -365,25 +377,47 @@ class FitnessAnalyzer {
             return existingKey === workoutKey;
         });
 
+        const workoutId = existingWorkoutIndex !== -1 ? this.workouts[existingWorkoutIndex].id : Date.now();
+
         const workout = {
-            id: Date.now(),
+            id: workoutId,
             timestamp: new Date().toISOString(),
             data: workoutData,
             insights: insights
         };
 
-        if (existingWorkoutIndex !== -1) {
-            // Replace existing workout with updated data
-            this.workouts[existingWorkoutIndex] = workout;
-            console.log('Updated existing workout:', workoutData.date, workoutData.workoutType);
-            this.showInfo(`Updated existing workout from ${workoutData.date}`);
-        } else {
-            // Add new workout
-            this.workouts.push(workout);
-            console.log('Added new workout:', workoutData.date, workoutData.workoutType);
-        }
+        try {
+            // Store images in IndexedDB
+            await this.imageStorage.storeImages(
+                workoutId,
+                this.uploadedImages.image1,
+                this.uploadedImages.image2
+            );
 
-        localStorage.setItem("fitnessWorkouts", JSON.stringify(this.workouts));
+            if (existingWorkoutIndex !== -1) {
+                // Replace existing workout with updated data
+                this.workouts[existingWorkoutIndex] = workout;
+                console.log('Updated existing workout:', workoutData.date, workoutData.workoutType);
+                this.showInfo(`Updated existing workout from ${workoutData.date}`);
+            } else {
+                // Add new workout
+                this.workouts.push(workout);
+                console.log('Added new workout:', workoutData.date, workoutData.workoutType);
+            }
+
+            localStorage.setItem("fitnessWorkouts", JSON.stringify(this.workouts));
+        } catch (error) {
+            console.error('Failed to save workout images:', error);
+            this.showError('Failed to save workout images. The workout data was saved but images may be missing.');
+            
+            // Still save the workout data even if image storage fails
+            if (existingWorkoutIndex !== -1) {
+                this.workouts[existingWorkoutIndex] = workout;
+            } else {
+                this.workouts.push(workout);
+            }
+            localStorage.setItem("fitnessWorkouts", JSON.stringify(this.workouts));
+        }
     }
 
     loadWorkoutHistory() {
@@ -411,29 +445,41 @@ class FitnessAnalyzer {
         recentWorkouts.forEach(workout => {
             const workoutDiv = document.createElement("div");
             workoutDiv.className = "workout-history-item clickable";
-            workoutDiv.style.cursor = "pointer";
             
-            // Add click handler to load workout data
-            workoutDiv.addEventListener('click', () => {
-                this.loadWorkoutData(workout);
-            });
-
             const date = new Date(workout.timestamp).toLocaleDateString();
             const data = workout.data;
 
             workoutDiv.innerHTML = `
-                <div>
-                    <div class="workout-date">${date}</div>
-                    <div class="workout-details">
-                        ${data.workoutType || "Workout"} • ${data.duration || "--"}
+                <div class="workout-main" style="flex: 1; cursor: pointer;">
+                    <div>
+                        <div class="workout-date">${date}</div>
+                        <div class="workout-details">
+                            ${data.workoutType || "Workout"} • ${data.duration || "--"}
+                        </div>
                     </div>
+                    <div class="workout-metrics">
+                        <div>${data.avgHeartRate || "--"} BPM</div>
+                        <div>${data.totalCalories || "--"} CAL</div>
+                    </div>
+                    <div class="click-indicator">👆 Click to view</div>
                 </div>
-                <div class="workout-metrics">
-                    <div>${data.avgHeartRate || "--"} BPM</div>
-                    <div>${data.totalCalories || "--"} CAL</div>
-                </div>
-                <div class="click-indicator">👆 Click to view</div>
+                <button class="delete-workout-btn" data-workout-id="${workout.id}" title="Delete workout">
+                    🗑️
+                </button>
             `;
+
+            // Add click handler to load workout data (only for the main area)
+            const workoutMain = workoutDiv.querySelector('.workout-main');
+            workoutMain.addEventListener('click', () => {
+                this.loadWorkoutData(workout);
+            });
+
+            // Add click handler for delete button
+            const deleteBtn = workoutDiv.querySelector('.delete-workout-btn');
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent triggering the workout load
+                this.confirmDeleteWorkout(workout);
+            });
 
             historyContainer.appendChild(workoutDiv);
         });
@@ -481,7 +527,7 @@ class FitnessAnalyzer {
         }, 3000);
     }
 
-    loadWorkoutData(workout) {
+    async loadWorkoutData(workout) {
         // Load the selected workout data into the main UI
         this.displayResults(workout.data, workout.insights);
         
@@ -489,6 +535,15 @@ class FitnessAnalyzer {
         const resultsTitle = document.querySelector("#resultsSection h2");
         const date = new Date(workout.timestamp).toLocaleDateString();
         resultsTitle.textContent = `Workout Analysis - ${date}`;
+        
+        // Retrieve and display historical screenshots from IndexedDB
+        try {
+            const screenshots = await this.imageStorage.getImages(workout.id);
+            this.displayHistoricalScreenshots(screenshots);
+        } catch (error) {
+            console.error('Failed to load workout images:', error);
+            // Don't show error to user as this is not critical for viewing workout data
+        }
         
         // Add a reset button to return to current analysis mode
         this.addResetButton();
@@ -498,6 +553,47 @@ class FitnessAnalyzer {
             behavior: "smooth", 
             block: "start" 
         });
+    }
+
+    displayHistoricalScreenshots(screenshots) {
+        // Remove any existing historical screenshots
+        const existingContainer = document.getElementById("historicalScreenshots");
+        if (existingContainer) {
+            existingContainer.remove();
+        }
+
+        // Only display if we have screenshots
+        if (!screenshots || (!screenshots.image1 && !screenshots.image2)) {
+            return;
+        }
+
+        // Create container for historical screenshots
+        const screenshotsContainer = document.createElement("div");
+        screenshotsContainer.id = "historicalScreenshots";
+        screenshotsContainer.className = "historical-screenshots";
+        screenshotsContainer.innerHTML = `
+            <h3>Original Screenshots</h3>
+            <div class="screenshots-grid">
+                ${screenshots.image1 ? `
+                    <div class="screenshot-item">
+                        <img src="${screenshots.image1}" alt="Screenshot 1" class="historical-screenshot">
+                        <div class="screenshot-label">Screenshot 1</div>
+                    </div>
+                ` : ''}
+                ${screenshots.image2 ? `
+                    <div class="screenshot-item">
+                        <img src="${screenshots.image2}" alt="Screenshot 2" class="historical-screenshot">
+                        <div class="screenshot-label">Screenshot 2</div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+
+        // Insert after the insights section
+        const insightsSection = document.querySelector(".insights-section");
+        if (insightsSection) {
+            insightsSection.after(screenshotsContainer);
+        }
     }
 
     addResetButton() {
@@ -544,6 +640,12 @@ class FitnessAnalyzer {
             resetBtn.remove();
         }
         
+        // Remove historical screenshots
+        const historicalScreenshots = document.getElementById("historicalScreenshots");
+        if (historicalScreenshots) {
+            historicalScreenshots.remove();
+        }
+        
         // Clear the results section or hide it if no current analysis exists
         const hasCurrentData = this.uploadedImages.image1 || this.uploadedImages.image2;
         if (!hasCurrentData) {
@@ -564,6 +666,93 @@ class FitnessAnalyzer {
             behavior: "smooth", 
             block: "start" 
         });
+    }
+
+    confirmDeleteWorkout(workout) {
+        const date = new Date(workout.timestamp).toLocaleDateString();
+        const workoutType = workout.data.workoutType || "Workout";
+        
+        const confirmDialog = document.createElement('div');
+        confirmDialog.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        `;
+        
+        confirmDialog.innerHTML = `
+            <div style="background: white; padding: 30px; border-radius: 15px; max-width: 400px; width: 90%; text-align: center;">
+                <h3 style="margin-bottom: 15px; color: #333;">Delete Workout</h3>
+                <p style="margin-bottom: 20px; color: #666;">
+                    Are you sure you want to delete this workout?
+                </p>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <strong>${workoutType}</strong><br>
+                    <small style="color: #666;">${date}</small>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="cancelDelete" style="padding: 10px 16px; background: #6c757d; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                        Cancel
+                    </button>
+                    <button id="confirmDelete" style="padding: 10px 16px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(confirmDialog);
+
+        document.getElementById('cancelDelete').onclick = () => {
+            document.body.removeChild(confirmDialog);
+        };
+
+        document.getElementById('confirmDelete').onclick = async () => {
+            await this.deleteWorkout(workout.id);
+            document.body.removeChild(confirmDialog);
+        };
+    }
+
+    async deleteWorkout(workoutId) {
+        // Find and remove the workout
+        const workoutIndex = this.workouts.findIndex(w => w.id === workoutId);
+        
+        if (workoutIndex !== -1) {
+            const deletedWorkout = this.workouts[workoutIndex];
+            this.workouts.splice(workoutIndex, 1);
+            
+            try {
+                // Delete images from IndexedDB
+                await this.imageStorage.deleteImages(workoutId);
+                console.log('Deleted workout images from IndexedDB');
+            } catch (error) {
+                console.error('Failed to delete workout images:', error);
+                // Continue with workout deletion even if image deletion fails
+            }
+            
+            // Update localStorage
+            localStorage.setItem("fitnessWorkouts", JSON.stringify(this.workouts));
+            
+            // Re-render the workout history
+            this.renderWorkoutHistory();
+            
+            // Show success message
+            this.showInfo(`Workout deleted successfully`);
+            
+            // If we're currently viewing the deleted workout, reset to current analysis
+            const resultsTitle = document.querySelector("#resultsSection h2");
+            if (resultsTitle && resultsTitle.textContent.includes("Workout Analysis -")) {
+                this.resetToCurrentAnalysis();
+            }
+            
+            console.log('Deleted workout:', deletedWorkout.data.workoutType, deletedWorkout.data.date);
+        }
     }
 }
 
