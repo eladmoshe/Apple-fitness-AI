@@ -4,7 +4,19 @@
 class ClaudeAPI {
     constructor(apiKey) {
         this.apiKey = apiKey;
-        this.baseURL = 'https://api.anthropic.com/v1/messages';
+        
+        // Check if we're running locally on our Node.js server
+        this.isLocalServer = window.location.hostname === 'localhost' && 
+                           window.location.port === '3000';
+        
+        if (this.isLocalServer) {
+            // Use our local server proxy
+            this.baseURL = '/api/claude';
+        } else {
+            // Fallback for GitHub Pages deployment
+            this.baseURL = 'https://api.anthropic.com/v1/messages';
+            this.proxyURL = 'https://corsproxy.io/?';
+        }
     }
 
     async analyzeScreenshots(image1, image2) {
@@ -51,14 +63,13 @@ Respond ONLY with valid JSON. Do not include any explanation or markdown formatt
 `;
 
         try {
-            const response = await fetch(this.baseURL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': this.apiKey,
-                    'anthropic-version': '2023-06-01'
-                },
-                body: JSON.stringify({
+            let url, requestBody, headers;
+            
+            if (this.isLocalServer) {
+                // Use our local server
+                url = this.baseURL;
+                requestBody = {
+                    apiKey: this.apiKey,
                     model: 'claude-3-sonnet-20240229',
                     max_tokens: 1000,
                     messages: [
@@ -73,7 +84,7 @@ Respond ONLY with valid JSON. Do not include any explanation or markdown formatt
                                     type: 'image',
                                     source: {
                                         type: 'base64',
-                                        media_type: 'image/jpeg',
+                                        media_type: this.getImageMediaType(image1),
                                         data: image1.split(',')[1] // Remove data:image/jpeg;base64,
                                     }
                                 },
@@ -81,14 +92,62 @@ Respond ONLY with valid JSON. Do not include any explanation or markdown formatt
                                     type: 'image',
                                     source: {
                                         type: 'base64',
-                                        media_type: 'image/jpeg',
+                                        media_type: this.getImageMediaType(image2),
                                         data: image2.split(',')[1] // Remove data:image/jpeg;base64,
                                     }
                                 }
                             ]
                         }
                     ]
-                })
+                };
+                headers = {
+                    'Content-Type': 'application/json'
+                };
+            } else {
+                // Use proxy for other environments
+                url = this.proxyURL + this.baseURL;
+                requestBody = {
+                    model: 'claude-3-sonnet-20240229',
+                    max_tokens: 1000,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: prompt
+                                },
+                                {
+                                    type: 'image',
+                                    source: {
+                                        type: 'base64',
+                                        media_type: this.getImageMediaType(image1),
+                                        data: image1.split(',')[1]
+                                    }
+                                },
+                                {
+                                    type: 'image',
+                                    source: {
+                                        type: 'base64',
+                                        media_type: this.getImageMediaType(image2),
+                                        data: image2.split(',')[1]
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                };
+                headers = {
+                    'Content-Type': 'application/json',
+                    'x-api-key': this.apiKey,
+                    'anthropic-version': '2023-06-01'
+                };
+            }
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
@@ -142,14 +201,13 @@ Respond ONLY with valid JSON. Do not include any explanation or markdown formatt
 `;
 
         try {
-            const response = await fetch(this.baseURL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': this.apiKey,
-                    'anthropic-version': '2023-06-01'
-                },
-                body: JSON.stringify({
+            let url, requestBody, headers;
+            
+            if (this.isLocalServer) {
+                // Use our local server
+                url = this.baseURL;
+                requestBody = {
+                    apiKey: this.apiKey,
                     model: 'claude-3-sonnet-20240229',
                     max_tokens: 1000,
                     messages: [
@@ -158,7 +216,34 @@ Respond ONLY with valid JSON. Do not include any explanation or markdown formatt
                             content: prompt
                         }
                     ]
-                })
+                };
+                headers = {
+                    'Content-Type': 'application/json'
+                };
+            } else {
+                // Use proxy for other environments
+                url = this.proxyURL + this.baseURL;
+                requestBody = {
+                    model: 'claude-3-sonnet-20240229',
+                    max_tokens: 1000,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ]
+                };
+                headers = {
+                    'Content-Type': 'application/json',
+                    'x-api-key': this.apiKey,
+                    'anthropic-version': '2023-06-01'
+                };
+            }
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
@@ -171,6 +256,17 @@ Respond ONLY with valid JSON. Do not include any explanation or markdown formatt
             console.error('Claude API error:', error);
             throw error;
         }
+    }
+
+    getImageMediaType(dataUrl) {
+        // Extract the media type from the data URL
+        // e.g., "data:image/png;base64,..." -> "image/png"
+        if (dataUrl.startsWith('data:')) {
+            const mediaType = dataUrl.split(';')[0].split(':')[1];
+            return mediaType;
+        }
+        // Fallback to JPEG if we can't determine the type
+        return 'image/jpeg';
     }
 }
 

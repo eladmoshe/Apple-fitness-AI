@@ -56,23 +56,33 @@ The app extracts the following from your Apple Fitness screenshots:
 
 ### Prerequisites
 - **Claude API Key**: Required from [Anthropic Console](https://console.anthropic.com/)
-- **Modern Browser**: Chrome 60+, Firefox 55+, Safari 12+, Edge 79+
+- **Node.js**: Version 16+ for local development
 - **Apple Fitness Screenshots**: Heart Rate + Summary views
 
-### Quick Setup
-1. **Get Claude API Key**:
+### Local Development Setup
+1. **Install Dependencies**:
+```bash
+npm install
+```
+
+2. **Start Development Server**:
+```bash
+npm run dev
+```
+
+3. **Open Application**:
+   - Navigate to `http://localhost:3000`
+   - Enter Claude API key when prompted
+   - Start analyzing your screenshots!
+
+### Claude API Setup
+1. **Get API Key**:
    - Visit [console.anthropic.com](https://console.anthropic.com/)
    - Sign in or create account
    - Navigate to "API Keys" section
    - Create new API key (starts with `sk-ant-`)
-   - Copy the key for use in app
 
-2. **Launch Application**:
-   - Open `index.html` in web browser
-   - Enter API key when prompted (one-time setup)
-   - Start analyzing your Apple Fitness screenshots!
-
-3. **First Analysis**:
+2. **First Analysis**:
    - Take screenshots of Heart Rate and Summary views in Apple Fitness
    - Upload both screenshots (drag & drop or click to browse)
    - Click "Analyze Workout" button
