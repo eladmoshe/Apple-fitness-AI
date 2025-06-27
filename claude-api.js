@@ -258,6 +258,120 @@ Respond ONLY with valid JSON. Do not include any explanation or markdown formatt
         }
     }
 
+    async generateUserSummary(allWorkouts) {
+        const prompt = `
+You are a world-class AI fitness coach analyzing a user's complete workout history. Provide a comprehensive fitness profile based on their workout data.
+
+Complete Workout History:
+${JSON.stringify(allWorkouts, null, 2)}
+
+Analyze this data and generate a detailed user fitness summary in the following JSON format:
+
+{
+    "fitnessProfile": {
+        "fitnessLevel": "string (Beginner/Intermediate/Advanced/Elite)",
+        "primaryStrengths": ["list of 2-3 key strengths"],
+        "areasForImprovement": ["list of 2-3 areas to improve"],
+        "workoutConsistency": "string (assessment of consistency)",
+        "preferredWorkoutTypes": ["list of most common workout types"]
+    },
+    "progressAnalysis": {
+        "overallTrend": "string (Improving/Stable/Declining)",
+        "keyMetricChanges": [
+            "specific metric improvements or declines with numbers",
+            "another significant change",
+            "third notable trend"
+        ],
+        "consistencyScore": "string (1-10 with explanation)",
+        "recoveryPatterns": "string (assessment of recovery trends)"
+    },
+    "performanceInsights": [
+        "Deep insight about cardiovascular fitness based on heart rate data",
+        "Analysis of calorie burn efficiency and patterns",
+        "Heart rate zone distribution analysis and what it reveals",
+        "Workout duration and intensity correlation insights"
+    ],
+    "personalizedRecommendations": [
+        "Specific recommendation for optimizing current workout routine",
+        "Suggestion for addressing identified weaknesses",
+        "Recommendation for progressive overload or variety",
+        "Recovery and rest day optimization advice"
+    ],
+    "achievements": [
+        "Notable personal records or improvements",
+        "Consistency milestones reached",
+        "Fitness goals that appear to be met"
+    ],
+    "futureGoals": [
+        "Suggested short-term goals (1-2 months)",
+        "Recommended medium-term objectives (3-6 months)",
+        "Long-term fitness aspirations to consider"
+    ]
+}
+
+Be specific, data-driven, and encouraging. Reference actual numbers from their workouts when possible. Make recommendations actionable and personalized to their specific patterns and progress.
+
+Respond ONLY with valid JSON. Do not include any explanation or markdown formatting.
+`;
+
+        try {
+            let url, requestBody, headers;
+            
+            if (this.isLocalServer) {
+                // Use our local server
+                url = this.baseURL;
+                requestBody = {
+                    apiKey: this.apiKey,
+                    model: 'claude-3-sonnet-20240229',
+                    max_tokens: 2000,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ]
+                };
+                headers = {
+                    'Content-Type': 'application/json'
+                };
+            } else {
+                // Use proxy for other environments
+                url = this.proxyURL + this.baseURL;
+                requestBody = {
+                    model: 'claude-3-sonnet-20240229',
+                    max_tokens: 2000,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: prompt
+                        }
+                    ]
+                };
+                headers = {
+                    'Content-Type': 'application/json',
+                    'x-api-key': this.apiKey,
+                    'anthropic-version': '2023-06-01'
+                };
+            }
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                throw new Error(`API request failed: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return JSON.parse(data.content[0].text);
+        } catch (error) {
+            console.error('Claude API error:', error);
+            throw error;
+        }
+    }
+
     getImageMediaType(dataUrl) {
         // Extract the media type from the data URL
         // e.g., "data:image/png;base64,..." -> "image/png"

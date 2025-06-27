@@ -91,6 +91,41 @@
                 </div>
             </div>
 
+            <div class="summary-section">
+                <div class="summary-header">
+                    <div class="summary-title">📊 Your Fitness Journey</div>
+                    <button id="generateSummaryBtn" class="summary-btn" disabled>
+                        Generate AI Summary
+                    </button>
+                </div>
+                <div id="summaryContainer" style="display: none;">
+                    <div class="summary-stats">
+                        <div class="summary-stat-card">
+                            <div class="summary-stat-value" id="totalWorkouts">--</div>
+                            <div class="summary-stat-label">Total Workouts</div>
+                        </div>
+                        <div class="summary-stat-card">
+                            <div class="summary-stat-value" id="avgDuration">--</div>
+                            <div class="summary-stat-label">Avg Duration</div>
+                        </div>
+                        <div class="summary-stat-card">
+                            <div class="summary-stat-value" id="totalCalories">--</div>
+                            <div class="summary-stat-label">Total Calories</div>
+                        </div>
+                        <div class="summary-stat-card">
+                            <div class="summary-stat-value" id="avgHeartRateOverall">--</div>
+                            <div class="summary-stat-label">Avg Heart Rate</div>
+                        </div>
+                    </div>
+                    <div class="ai-summary-section">
+                        <div class="ai-summary-title">🤖 AI Fitness Analysis</div>
+                        <div id="aiSummaryContent">
+                            <!-- AI summary will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="history-section">
                 <div class="history-title">Workout History</div>
                 <div id="historyContainer">

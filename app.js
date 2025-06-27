@@ -8,6 +8,7 @@ class FitnessAnalyzer {
         this.renderWorkoutHistory();
         this.checkApiKey();
         this.initImageStorage();
+        this.checkSummaryButton();
     }
 
     async initImageStorage() {
@@ -26,6 +27,7 @@ class FitnessAnalyzer {
         if (apiKey) {
             this.claudeAPI = new ClaudeAPI(apiKey);
             this.checkAnalyzeButton(); // Update button state when API key is available
+            this.checkSummaryButton(); // Update summary button state when API key is available
         } else {
             // Show API key input dialog
             this.showApiKeyDialog();
@@ -96,6 +98,7 @@ class FitnessAnalyzer {
                 localStorage.setItem('claude-api-key', apiKey);
                 this.claudeAPI = new ClaudeAPI(apiKey);
                 this.checkAnalyzeButton(); // Update button state when API key is set
+                this.checkSummaryButton(); // Update summary button state when API key is set
                 document.body.removeChild(dialog);
             } else {
                 alert('Please enter a valid Claude API key (should start with "sk-ant-")');
@@ -127,6 +130,9 @@ class FitnessAnalyzer {
 
         const analyzeBtn = document.getElementById("analyzeBtn");
         analyzeBtn.addEventListener("click", this.analyzeScreenshots.bind(this));
+
+        const generateSummaryBtn = document.getElementById("generateSummaryBtn");
+        generateSummaryBtn.addEventListener("click", this.generateUserSummary.bind(this));
     }
 
     handleDragOver(e) {
@@ -306,6 +312,7 @@ class FitnessAnalyzer {
             this.displayResults(workoutData, insights);
             await this.saveWorkout(workoutData, insights);
             this.renderWorkoutHistory();
+            this.checkSummaryButton(); // Update summary button after adding workout
             this.resetUploadAreas();
         } catch (error) {
             this.showError(`Analysis failed: ${error.message}`);
@@ -796,6 +803,9 @@ class FitnessAnalyzer {
             // Re-render the workout history
             this.renderWorkoutHistory();
             
+            // Update summary button
+            this.checkSummaryButton();
+            
             // Show success message
             this.showInfo(`Workout deleted successfully`);
             
@@ -806,6 +816,202 @@ class FitnessAnalyzer {
             }
             
             console.log('Deleted workout:', deletedWorkout.data.workoutType, deletedWorkout.data.date);
+        }
+    }
+
+    async generateUserSummary() {
+        if (this.workouts.length === 0) {
+            this.showError("No workout data available. Upload and analyze some workouts first!");
+            return;
+        }
+
+        if (this.workouts.length < 2) {
+            this.showError("At least 2 workouts are needed for a comprehensive summary.");
+            return;
+        }
+
+        this.showLoading(true);
+        this.hideError();
+
+        try {
+            // Calculate basic statistics
+            this.calculateSummaryStats();
+
+            // Generate AI summary
+            const aiSummary = await this.claudeAPI.generateUserSummary(this.workouts);
+            
+            this.displayUserSummary(aiSummary);
+            this.showInfo("Fitness journey summary generated successfully!");
+            
+            // Scroll to summary section
+            document.querySelector(".summary-section").scrollIntoView({ 
+                behavior: "smooth", 
+                block: "start" 
+            });
+        } catch (error) {
+            this.showError(`Failed to generate summary: ${error.message}`);
+        } finally {
+            this.showLoading(false);
+        }
+    }
+
+    calculateSummaryStats() {
+        const totalWorkouts = this.workouts.length;
+        
+        // Calculate total calories
+        const totalCalories = this.workouts.reduce((sum, workout) => {
+            return sum + (workout.data.totalCalories || 0);
+        }, 0);
+
+        // Calculate average duration (convert to minutes)
+        const durations = this.workouts
+            .map(w => w.data.duration)
+            .filter(d => d)
+            .map(d => this.durationToMinutes(d));
+        
+        const avgDurationMinutes = durations.length > 0 
+            ? durations.reduce((sum, d) => sum + d, 0) / durations.length 
+            : 0;
+
+        // Calculate average heart rate
+        const heartRates = this.workouts
+            .map(w => w.data.avgHeartRate)
+            .filter(hr => hr && hr > 0);
+        
+        const avgHeartRate = heartRates.length > 0 
+            ? Math.round(heartRates.reduce((sum, hr) => sum + hr, 0) / heartRates.length)
+            : 0;
+
+        // Update UI
+        document.getElementById("totalWorkouts").textContent = totalWorkouts;
+        document.getElementById("avgDuration").textContent = avgDurationMinutes > 0 
+            ? `${Math.round(avgDurationMinutes)}min` 
+            : "--";
+        document.getElementById("totalCalories").textContent = totalCalories > 0 
+            ? `${totalCalories.toLocaleString()}` 
+            : "--";
+        document.getElementById("avgHeartRateOverall").textContent = avgHeartRate > 0 
+            ? `${avgHeartRate} BPM` 
+            : "--";
+    }
+
+    durationToMinutes(duration) {
+        // Convert "45:30" or "1:45:30" to minutes
+        const parts = duration.split(':').map(Number);
+        if (parts.length === 2) {
+            return parts[0] + parts[1] / 60; // MM:SS
+        } else if (parts.length === 3) {
+            return parts[0] * 60 + parts[1] + parts[2] / 60; // HH:MM:SS
+        }
+        return 0;
+    }
+
+    displayUserSummary(aiSummary) {
+        const summaryContainer = document.getElementById("summaryContainer");
+        const aiSummaryContent = document.getElementById("aiSummaryContent");
+
+        // Clear previous content
+        aiSummaryContent.innerHTML = "";
+
+        // Fitness Profile
+        if (aiSummary.fitnessProfile) {
+            const profileSection = this.createSummarySection(
+                "🏆 Fitness Profile", 
+                [
+                    `Fitness Level: ${aiSummary.fitnessProfile.fitnessLevel}`,
+                    `Workout Consistency: ${aiSummary.fitnessProfile.workoutConsistency}`,
+                    ...aiSummary.fitnessProfile.primaryStrengths?.map(s => `Strength: ${s}`) || [],
+                    ...aiSummary.fitnessProfile.areasForImprovement?.map(a => `Improve: ${a}`) || []
+                ]
+            );
+            aiSummaryContent.appendChild(profileSection);
+        }
+
+        // Progress Analysis
+        if (aiSummary.progressAnalysis) {
+            const progressSection = this.createSummarySection(
+                "📈 Progress Analysis",
+                [
+                    `Overall Trend: ${aiSummary.progressAnalysis.overallTrend}`,
+                    `Consistency Score: ${aiSummary.progressAnalysis.consistencyScore}`,
+                    `Recovery: ${aiSummary.progressAnalysis.recoveryPatterns}`,
+                    ...aiSummary.progressAnalysis.keyMetricChanges || []
+                ]
+            );
+            aiSummaryContent.appendChild(progressSection);
+        }
+
+        // Performance Insights
+        if (aiSummary.performanceInsights) {
+            const insightsSection = this.createSummarySection(
+                "🎯 Performance Insights",
+                aiSummary.performanceInsights
+            );
+            aiSummaryContent.appendChild(insightsSection);
+        }
+
+        // Recommendations
+        if (aiSummary.personalizedRecommendations) {
+            const recommendationsSection = this.createSummarySection(
+                "💡 Personalized Recommendations",
+                aiSummary.personalizedRecommendations
+            );
+            aiSummaryContent.appendChild(recommendationsSection);
+        }
+
+        // Achievements
+        if (aiSummary.achievements) {
+            const achievementsSection = this.createSummarySection(
+                "🏅 Achievements",
+                aiSummary.achievements
+            );
+            aiSummaryContent.appendChild(achievementsSection);
+        }
+
+        // Future Goals
+        if (aiSummary.futureGoals) {
+            const goalsSection = this.createSummarySection(
+                "🎯 Suggested Goals",
+                aiSummary.futureGoals
+            );
+            aiSummaryContent.appendChild(goalsSection);
+        }
+
+        // Show the summary container
+        summaryContainer.style.display = "block";
+    }
+
+    createSummarySection(title, items) {
+        const section = document.createElement("div");
+        section.className = "summary-category";
+
+        const titleElement = document.createElement("h4");
+        titleElement.textContent = title;
+        section.appendChild(titleElement);
+
+        items.forEach(item => {
+            const insightElement = document.createElement("div");
+            insightElement.className = "summary-insight";
+            insightElement.textContent = item;
+            section.appendChild(insightElement);
+        });
+
+        return section;
+    }
+
+    checkSummaryButton() {
+        const summaryBtn = document.getElementById("generateSummaryBtn");
+        const hasWorkouts = this.workouts.length >= 2;
+        const hasApiKey = !!this.claudeAPI;
+        
+        summaryBtn.disabled = !hasWorkouts || !hasApiKey;
+        
+        if (!hasApiKey) {
+            summaryBtn.textContent = "⚠️ API Key Required";
+        } else if (!hasWorkouts) {
+            summaryBtn.textContent = `Need ${2 - this.workouts.length} more workouts`;
+        } else {
+            summaryBtn.textContent = "Generate AI Summary";
         }
     }
 }
