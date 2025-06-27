@@ -25,6 +25,7 @@ class FitnessAnalyzer {
         const apiKey = localStorage.getItem('claude-api-key');
         if (apiKey) {
             this.claudeAPI = new ClaudeAPI(apiKey);
+            this.checkAnalyzeButton(); // Update button state when API key is available
         } else {
             // Show API key input dialog
             this.showApiKeyDialog();
@@ -39,7 +40,7 @@ class FitnessAnalyzer {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.8);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -47,41 +48,65 @@ class FitnessAnalyzer {
         `;
         
         dialog.innerHTML = `
-            <div style="background: white; padding: 30px; border-radius: 15px; max-width: 500px; width: 90%;">
-                <h3 style="margin-bottom: 20px; color: #333;">Claude API Key Required</h3>
-                <p style="margin-bottom: 20px; color: #666;">
-                    To use real image analysis, please enter your Claude API key. 
-                    You can get one from <a href="https://console.anthropic.com/" target="_blank">Anthropic Console</a>.
+            <div style="background: white; padding: 40px; border-radius: 15px; max-width: 600px; width: 90%; text-align: center;">
+                <h2 style="margin-bottom: 20px; color: #333;">🔑 Claude API Key Required</h2>
+                <p style="margin-bottom: 25px; color: #666; line-height: 1.6;">
+                    This app requires a Claude API key to analyze your Apple Fitness screenshots. 
+                    Get your API key from <a href="https://console.anthropic.com/" target="_blank" style="color: #667eea; text-decoration: none;">Anthropic Console</a>.
                 </p>
-                <input type="password" id="apiKeyInput" placeholder="Enter your Claude API key" 
-                       style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px;">
-                <div style="display: flex; gap: 10px;">
-                    <button id="saveApiKey" style="flex: 1; padding: 12px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer;">
-                        Save & Continue
-                    </button>
-                    <button id="useMockData" style="flex: 1; padding: 12px; background: #6c757d; color: white; border: none; border-radius: 8px; cursor: pointer;">
-                        Use Mock Data
-                    </button>
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 25px; text-align: left;">
+                    <h4 style="margin-bottom: 10px; color: #333;">📋 How to get your API key:</h4>
+                    <ol style="color: #666; line-height: 1.6; margin: 0; padding-left: 20px;">
+                        <li>Visit <a href="https://console.anthropic.com/" target="_blank" style="color: #667eea;">console.anthropic.com</a></li>
+                        <li>Sign in or create an account</li>
+                        <li>Go to "API Keys" section</li>
+                        <li>Create a new API key</li>
+                        <li>Copy and paste it below</li>
+                    </ol>
                 </div>
+                <input type="password" id="apiKeyInput" placeholder="sk-ant-..." 
+                       style="width: 100%; padding: 15px; border: 2px solid #ddd; border-radius: 8px; margin-bottom: 20px; font-family: monospace;">
+                <button id="saveApiKey" style="width: 100%; padding: 15px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;">
+                    🚀 Save API Key & Start Analyzing
+                </button>
+                <p style="margin-top: 15px; font-size: 12px; color: #999;">
+                    Your API key is stored locally in your browser and never shared.
+                </p>
             </div>
         `;
 
         document.body.appendChild(dialog);
 
-        document.getElementById('saveApiKey').onclick = () => {
-            const apiKey = document.getElementById('apiKeyInput').value.trim();
-            if (apiKey) {
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const saveButton = document.getElementById('saveApiKey');
+
+        // Focus on input when dialog opens
+        setTimeout(() => apiKeyInput.focus(), 100);
+
+        // Allow Enter key to save
+        apiKeyInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                saveButton.click();
+            }
+        });
+
+        saveButton.onclick = () => {
+            const apiKey = apiKeyInput.value.trim();
+            if (apiKey && apiKey.startsWith('sk-ant-')) {
                 localStorage.setItem('claude-api-key', apiKey);
                 this.claudeAPI = new ClaudeAPI(apiKey);
+                this.checkAnalyzeButton(); // Update button state when API key is set
                 document.body.removeChild(dialog);
             } else {
-                alert('Please enter a valid API key');
+                alert('Please enter a valid Claude API key (should start with "sk-ant-")');
+                apiKeyInput.focus();
             }
         };
 
-        document.getElementById('useMockData').onclick = () => {
-            document.body.removeChild(dialog);
-        };
+        // Prevent closing dialog by clicking outside
+        dialog.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
     }
 
     initializeEventListeners() {
@@ -154,9 +179,13 @@ class FitnessAnalyzer {
     checkAnalyzeButton() {
         const analyzeBtn = document.getElementById("analyzeBtn");
         const bothUploaded = this.uploadedImages.image1 && this.uploadedImages.image2;
-        analyzeBtn.disabled = !bothUploaded;
+        const hasApiKey = !!this.claudeAPI;
+        
+        analyzeBtn.disabled = !bothUploaded || !hasApiKey;
 
-        if (bothUploaded) {
+        if (!hasApiKey) {
+            analyzeBtn.textContent = "⚠️ Claude API Key Required";
+        } else if (bothUploaded) {
             analyzeBtn.textContent = "Analyze Workout";
         } else {
             const uploadedCount = Object.values(this.uploadedImages).filter((img) => img).length;
@@ -193,91 +222,31 @@ class FitnessAnalyzer {
     }
 
     async extractWorkoutData(image1, image2) {
-        if (this.claudeAPI) {
-            try {
-                // Use real Claude API for image analysis
-                return await this.claudeAPI.analyzeScreenshots(image1, image2);
-            } catch (error) {
-                console.error('Claude API failed, falling back to mock data:', error);
-                // Fall back to mock data if API fails
-            }
+        if (!this.claudeAPI) {
+            throw new Error('Claude API key is required. Please set up your API key to analyze screenshots.');
         }
-        
-        // Mock data extraction - used when no API key or API fails
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Return mock workout data with realistic past date
-        const mockDate = new Date();
-        mockDate.setDate(mockDate.getDate() - Math.floor(Math.random() * 7)); // Random date within last week
-        
-        return {
-            workoutType: "Functional Strength Training",
-            date: mockDate.toISOString().split('T')[0],
-            duration: "45:30",
-            avgHeartRate: 142,
-            maxHeartRate: 178,
-            totalCalories: 480,
-            activeCalories: 365,
-            heartRateZones: {
-                zone1: "08:15",
-                zone2: "12:30", 
-                zone3: "18:45",
-                zone4: "05:20",
-                zone5: "00:40"
-            },
-            heartRateRanges: {
-                zone1: "<120 BPM",
-                zone2: "120-140 BPM",
-                zone3: "141-160 BPM", 
-                zone4: "161-175 BPM",
-                zone5: "176+ BPM"
-            },
-            postWorkoutHeartRate: {
-                immediate: 165,
-                "1minute": 98,
-                "2minute": 85
-            },
-            location: "Home Gym",
-            effort: "Moderate to High"
-        };
+
+        try {
+            return await this.claudeAPI.analyzeScreenshots(image1, image2);
+        } catch (error) {
+            console.error('Claude API failed:', error);
+            throw new Error(`Failed to analyze screenshots: ${error.message}`);
+        }
     }
 
     async generateInsights(workoutData) {
         const workoutHistory = this.workouts.slice(-5); // Last 5 workouts for context
         
-        if (this.claudeAPI) {
-            try {
-                // Use real Claude API for insights generation
-                return await this.claudeAPI.generateInsights(workoutData, workoutHistory);
-            } catch (error) {
-                console.error('Claude API failed for insights, falling back to mock data:', error);
-                // Fall back to mock insights if API fails
-            }
+        if (!this.claudeAPI) {
+            throw new Error('Claude API key is required. Please set up your API key to generate insights.');
         }
-        
-        // Mock insights generation - used when no API key or API fails
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        return {
-            performanceInsights: [
-                `Your average heart rate of ${workoutData.avgHeartRate} BPM indicates excellent cardiovascular engagement during strength training.`,
-                "Strong recovery with heart rate dropping to 98 BPM within 1 minute shows good cardiovascular fitness.",
-                `Spending ${workoutData.heartRateZones.zone3} in Zone 3 demonstrates optimal fat-burning intensity.`
-            ],
-            trends: [
-                "Your strength training sessions are consistently maintaining moderate to high intensity.",
-                "Post-workout recovery times have improved by 15% over the last month."
-            ],
-            recommendations: [
-                "Consider adding 2-3 minutes of high-intensity intervals to boost Zone 4 and 5 engagement.",
-                "Your recovery is excellent - you could potentially increase workout frequency.",
-                "Try incorporating longer warm-up periods to gradually build into higher heart rate zones."
-            ],
-            comparisons: [
-                "This workout burned 12% more calories than your average strength training session.",
-                "Heart rate zones were well-distributed compared to your typical cardio-focused workouts."
-            ]
-        };
+
+        try {
+            return await this.claudeAPI.generateInsights(workoutData, workoutHistory);
+        } catch (error) {
+            console.error('Claude API failed for insights:', error);
+            throw new Error(`Failed to generate insights: ${error.message}`);
+        }
     }
 
     displayResults(workoutData, insights) {
