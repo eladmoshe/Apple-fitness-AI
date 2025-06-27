@@ -1,0 +1,29 @@
+{
+  "name": "apple-fitness-analyzer",
+  "version": "1.3.0",
+  "description": "AI-powered Apple Fitness screenshot analyzer using Claude API",
+  "type": "module",
+  "scripts": {
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "serve": "python -m http.server 8000",
+    "dev": "python -m http.server 8000"
+  },
+  "devDependencies": {
+    "@vitest/ui": "^1.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "vitest": "^1.0.0",
+    "jsdom": "^23.0.0",
+    "happy-dom": "^12.0.0"
+  },
+  "keywords": [
+    "apple-fitness",
+    "claude-ai",
+    "workout-analysis",
+    "fitness-tracking"
+  ],
+  "author": "Apple Fitness AI Analyzer",
+  "license": "MIT"
+}

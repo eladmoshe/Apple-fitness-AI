@@ -17,53 +17,29 @@
             </div>
 
             <div class="upload-section">
-                <div class="upload-grid">
-                    <div class="upload-slot">
-                        <div class="upload-area" id="uploadArea1">
-                            <div class="upload-icon">📱</div>
-                            <div class="upload-text">Screenshot 1</div>
-                            <div class="upload-subtext">
-                                Drop or click to select
-                            </div>
-                            <input
-                                type="file"
-                                id="fileInput1"
-                                class="file-input"
-                                accept="image/*"
-                            />
-                        </div>
-                        <img
-                            id="screenshotPreview1"
-                            class="screenshot-preview"
-                            style="display: none"
-                        />
-                        <div class="upload-status" id="status1">
-                            ❌ Not uploaded
-                        </div>
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📱📊</div>
+                    <div class="upload-text">Upload Apple Fitness Screenshots</div>
+                    <div class="upload-subtext">
+                        Drop multiple files here or click to select<br>
+                        <small>At least 2 screenshots required for analysis</small>
                     </div>
+                    <input
+                        type="file"
+                        id="fileInput"
+                        class="file-input"
+                        accept="image/*"
+                        multiple
+                    />
+                </div>
 
-                    <div class="upload-slot">
-                        <div class="upload-area" id="uploadArea2">
-                            <div class="upload-icon">📊</div>
-                            <div class="upload-text">Screenshot 2</div>
-                            <div class="upload-subtext">
-                                Drop or click to select
-                            </div>
-                            <input
-                                type="file"
-                                id="fileInput2"
-                                class="file-input"
-                                accept="image/*"
-                            />
-                        </div>
-                        <img
-                            id="screenshotPreview2"
-                            class="screenshot-preview"
-                            style="display: none"
-                        />
-                        <div class="upload-status" id="status2">
-                            ❌ Not uploaded
-                        </div>
+                <div id="filePreviewContainer" class="file-preview-container" style="display: none;">
+                    <div class="file-preview-header">
+                        <span class="file-count">0 files selected</span>
+                        <button id="clearAllBtn" class="clear-all-btn">Clear All</button>
+                    </div>
+                    <div id="filePreviewGrid" class="file-preview-grid">
+                        <!-- File previews will be populated here -->
                     </div>
                 </div>
 

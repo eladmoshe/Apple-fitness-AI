@@ -1,7 +1,7 @@
 class FitnessAnalyzer {
     constructor() {
         this.workouts = this.loadWorkoutHistory();
-        this.uploadedImages = { image1: null, image2: null };
+        this.uploadedImages = []; // Changed to array for multiple files
         this.claudeAPI = null;
         this.imageStorage = new ImageStorage();
         this.initializeEventListeners();
@@ -110,92 +110,185 @@ class FitnessAnalyzer {
     }
 
     initializeEventListeners() {
-        // Setup for both upload areas
-        for (let i = 1; i <= 2; i++) {
-            const uploadArea = document.getElementById(`uploadArea${i}`);
-            const fileInput = document.getElementById(`fileInput${i}`);
+        // Setup for single upload area with multiple file support
+        const uploadArea = document.getElementById("uploadArea");
+        const fileInput = document.getElementById("fileInput");
+        const clearAllBtn = document.getElementById("clearAllBtn");
 
-            uploadArea.addEventListener("click", () => fileInput.click());
-            uploadArea.addEventListener("dragover", (e) => this.handleDragOver(e, i));
-            uploadArea.addEventListener("dragleave", (e) => this.handleDragLeave(e, i));
-            uploadArea.addEventListener("drop", (e) => this.handleDrop(e, i));
-            fileInput.addEventListener("change", (e) => this.handleFileSelect(e, i));
+        uploadArea.addEventListener("click", () => fileInput.click());
+        uploadArea.addEventListener("dragover", (e) => this.handleDragOver(e));
+        uploadArea.addEventListener("dragleave", (e) => this.handleDragLeave(e));
+        uploadArea.addEventListener("drop", (e) => this.handleDrop(e));
+        fileInput.addEventListener("change", (e) => this.handleFileSelect(e));
+
+        if (clearAllBtn) {
+            clearAllBtn.addEventListener("click", () => this.clearAllFiles());
         }
 
         const analyzeBtn = document.getElementById("analyzeBtn");
         analyzeBtn.addEventListener("click", this.analyzeScreenshots.bind(this));
     }
 
-    handleDragOver(e, slotNumber) {
+    handleDragOver(e) {
         e.preventDefault();
-        document.getElementById(`uploadArea${slotNumber}`).classList.add("dragover");
+        document.getElementById("uploadArea").classList.add("dragover");
     }
 
-    handleDragLeave(e, slotNumber) {
+    handleDragLeave(e) {
         e.preventDefault();
-        document.getElementById(`uploadArea${slotNumber}`).classList.remove("dragover");
+        document.getElementById("uploadArea").classList.remove("dragover");
     }
 
-    handleDrop(e, slotNumber) {
+    handleDrop(e) {
         e.preventDefault();
-        document.getElementById(`uploadArea${slotNumber}`).classList.remove("dragover");
-        const files = e.dataTransfer.files;
+        document.getElementById("uploadArea").classList.remove("dragover");
+        const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) {
-            this.processFile(files[0], slotNumber);
+            this.processFiles(files);
         }
     }
 
-    handleFileSelect(e, slotNumber) {
-        const file = e.target.files[0];
-        if (file) {
-            this.processFile(file, slotNumber);
+    handleFileSelect(e) {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+            this.processFiles(files);
         }
     }
 
-    processFile(file, slotNumber) {
-        if (!file.type.startsWith("image/")) {
-            this.showError("Please select an image file.");
+    processFiles(files) {
+        // Filter out non-image files
+        const imageFiles = files.filter(file => file.type.startsWith("image/"));
+        
+        if (imageFiles.length === 0) {
+            this.showError("Please select at least one image file.");
             return;
         }
 
+        if (imageFiles.length !== files.length) {
+            this.showError(`${files.length - imageFiles.length} non-image files were skipped.`);
+        }
+
+        // Process each image file
+        imageFiles.forEach(file => {
+            this.processSingleFile(file);
+        });
+    }
+
+    processSingleFile(file) {
+        // Check for duplicates
+        const existingIndex = this.uploadedImages.findIndex(img => img.name === file.name);
+        if (existingIndex !== -1) {
+            // Replace existing file
+            this.uploadedImages[existingIndex] = { ...this.uploadedImages[existingIndex], file };
+            this.updateFilePreview(this.uploadedImages[existingIndex]);
+            return;
+        }
+
+        const fileId = Date.now() + Math.random();
+        const imageData = {
+            id: fileId,
+            name: file.name,
+            size: file.size,
+            file: file,
+            dataUrl: null
+        };
+
         const reader = new FileReader();
         reader.onload = (e) => {
-            const preview = document.getElementById(`screenshotPreview${slotNumber}`);
-            const uploadArea = document.getElementById(`uploadArea${slotNumber}`);
-            const status = document.getElementById(`status${slotNumber}`);
-
-            preview.src = e.target.result;
-            preview.style.display = "block";
-            uploadArea.classList.add("uploaded");
-            status.textContent = "✅ Uploaded";
-            status.classList.add("uploaded");
-
-            this.uploadedImages[`image${slotNumber}`] = e.target.result;
+            imageData.dataUrl = e.target.result;
+            this.uploadedImages.push(imageData);
+            this.updateFilePreview(imageData);
+            this.updateFileCount();
             this.checkAnalyzeButton();
         };
         reader.readAsDataURL(file);
     }
 
+    updateFilePreview(imageData) {
+        const previewContainer = document.getElementById("filePreviewContainer");
+        const previewGrid = document.getElementById("filePreviewGrid");
+        
+        // Show preview container
+        previewContainer.style.display = "block";
+
+        // Check if preview already exists (for updates)
+        let previewItem = document.getElementById(`preview-${imageData.id}`);
+        
+        if (!previewItem) {
+            // Create new preview item
+            previewItem = document.createElement("div");
+            previewItem.className = "file-preview-item";
+            previewItem.id = `preview-${imageData.id}`;
+            previewGrid.appendChild(previewItem);
+        }
+
+        previewItem.innerHTML = `
+            <button class="file-preview-remove" onclick="fitnessAnalyzer.removeFile('${imageData.id}')">
+                ×
+            </button>
+            <img src="${imageData.dataUrl}" alt="${imageData.name}" class="file-preview-image">
+            <div class="file-preview-name">${imageData.name}</div>
+            <div style="font-size: 0.7rem; color: #999;">
+                ${(imageData.size / 1024).toFixed(1)} KB
+            </div>
+        `;
+    }
+
+    updateFileCount() {
+        const fileCount = document.querySelector(".file-count");
+        const count = this.uploadedImages.length;
+        fileCount.textContent = `${count} file${count !== 1 ? 's' : ''} selected`;
+    }
+
+    removeFile(fileId) {
+        const index = this.uploadedImages.findIndex(img => img.id == fileId);
+        if (index !== -1) {
+            this.uploadedImages.splice(index, 1);
+            
+            const previewItem = document.getElementById(`preview-${fileId}`);
+            if (previewItem) {
+                previewItem.remove();
+            }
+
+            this.updateFileCount();
+            this.checkAnalyzeButton();
+
+            // Hide preview container if no files
+            if (this.uploadedImages.length === 0) {
+                document.getElementById("filePreviewContainer").style.display = "none";
+            }
+        }
+    }
+
+    clearAllFiles() {
+        this.uploadedImages = [];
+        document.getElementById("filePreviewContainer").style.display = "none";
+        document.getElementById("filePreviewGrid").innerHTML = "";
+        document.getElementById("fileInput").value = "";
+        this.checkAnalyzeButton();
+    }
+
     checkAnalyzeButton() {
         const analyzeBtn = document.getElementById("analyzeBtn");
-        const bothUploaded = this.uploadedImages.image1 && this.uploadedImages.image2;
+        const uploadedCount = this.uploadedImages.length;
+        const hasEnoughImages = uploadedCount >= 2;
         const hasApiKey = !!this.claudeAPI;
         
-        analyzeBtn.disabled = !bothUploaded || !hasApiKey;
+        analyzeBtn.disabled = !hasEnoughImages || !hasApiKey;
 
         if (!hasApiKey) {
             analyzeBtn.textContent = "⚠️ Claude API Key Required";
-        } else if (bothUploaded) {
-            analyzeBtn.textContent = "Analyze Workout";
+        } else if (hasEnoughImages) {
+            analyzeBtn.textContent = `Analyze Workout (${uploadedCount} images)`;
         } else {
-            const uploadedCount = Object.values(this.uploadedImages).filter((img) => img).length;
-            analyzeBtn.textContent = `Upload ${2 - uploadedCount} more screenshot${uploadedCount === 1 ? "" : "s"}`;
+            const needed = 2 - uploadedCount;
+            analyzeBtn.textContent = `Upload ${needed} more screenshot${needed !== 1 ? "s" : ""}`;
         }
     }
 
     async analyzeScreenshots() {
-        if (!this.uploadedImages.image1 || !this.uploadedImages.image2) {
-            this.showError("Please upload both screenshots first.");
+        if (this.uploadedImages.length < 2) {
+            this.showError("Please upload at least 2 screenshots first.");
             return;
         }
 
@@ -203,10 +296,10 @@ class FitnessAnalyzer {
         this.hideError();
 
         try {
-            // Simulate analysis with mock data for demo purposes
+            // Use the first two images for analysis
             const workoutData = await this.extractWorkoutData(
-                this.uploadedImages.image1,
-                this.uploadedImages.image2
+                this.uploadedImages[0].dataUrl,
+                this.uploadedImages[1].dataUrl
             );
             const insights = await this.generateInsights(workoutData);
 
@@ -318,22 +411,14 @@ class FitnessAnalyzer {
     }
 
     resetUploadAreas() {
-        for (let i = 1; i <= 2; i++) {
-            const preview = document.getElementById(`screenshotPreview${i}`);
-            const uploadArea = document.getElementById(`uploadArea${i}`);
-            const status = document.getElementById(`status${i}`);
-            const fileInput = document.getElementById(`fileInput${i}`);
-
-            preview.style.display = "none";
-            preview.src = "";
-            uploadArea.classList.remove("uploaded");
-            status.textContent = "❌ Not uploaded";
-            status.classList.remove("uploaded");
-            fileInput.value = "";
+        // Clear all uploaded files
+        this.clearAllFiles();
+        
+        // Remove any upload state classes
+        const uploadArea = document.getElementById("uploadArea");
+        if (uploadArea) {
+            uploadArea.classList.remove("uploaded", "dragover");
         }
-
-        this.uploadedImages = { image1: null, image2: null };
-        this.checkAnalyzeButton();
     }
 
     async saveWorkout(workoutData, insights) {
@@ -356,11 +441,11 @@ class FitnessAnalyzer {
         };
 
         try {
-            // Store images in IndexedDB
+            // Store the first two images in IndexedDB (for compatibility with existing storage system)
             await this.imageStorage.storeImages(
                 workoutId,
-                this.uploadedImages.image1,
-                this.uploadedImages.image2
+                this.uploadedImages[0]?.dataUrl || null,
+                this.uploadedImages[1]?.dataUrl || null
             );
 
             if (existingWorkoutIndex !== -1) {
@@ -727,5 +812,5 @@ class FitnessAnalyzer {
 
 // Initialize the app when the page loads
 document.addEventListener("DOMContentLoaded", () => {
-    new FitnessAnalyzer();
+    window.fitnessAnalyzer = new FitnessAnalyzer();
 });
