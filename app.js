@@ -145,7 +145,7 @@ class FitnessAnalyzer {
         analyzeBtn.disabled = !bothUploaded;
 
         if (bothUploaded) {
-            analyzeBtn.textContent = "Analyze Complete Workout Data";
+            analyzeBtn.textContent = "Analyze Workout";
         } else {
             const uploadedCount = Object.values(this.uploadedImages).filter((img) => img).length;
             analyzeBtn.textContent = `Upload ${2 - uploadedCount} more screenshot${uploadedCount === 1 ? "" : "s"}`;
@@ -180,11 +180,11 @@ class FitnessAnalyzer {
         }
     }
 
-    async extractWorkoutData(heartRateImage, summaryImage) {
+    async extractWorkoutData(image1, image2) {
         if (this.claudeAPI) {
             try {
                 // Use real Claude API for image analysis
-                return await this.claudeAPI.analyzeScreenshots(heartRateImage, summaryImage);
+                return await this.claudeAPI.analyzeScreenshots(image1, image2);
             } catch (error) {
                 console.error('Claude API failed, falling back to mock data:', error);
                 // Fall back to mock data if API fails
@@ -194,10 +194,13 @@ class FitnessAnalyzer {
         // Mock data extraction - used when no API key or API fails
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Return mock workout data
+        // Return mock workout data with realistic past date
+        const mockDate = new Date();
+        mockDate.setDate(mockDate.getDate() - Math.floor(Math.random() * 7)); // Random date within last week
+        
         return {
             workoutType: "Functional Strength Training",
-            date: new Date().toISOString().split('T')[0],
+            date: mockDate.toISOString().split('T')[0],
             duration: "45:30",
             avgHeartRate: 142,
             maxHeartRate: 178,
@@ -353,6 +356,15 @@ class FitnessAnalyzer {
     }
 
     saveWorkout(workoutData, insights) {
+        // Create a unique identifier for the workout based on date, type, and duration
+        const workoutKey = `${workoutData.date}_${workoutData.workoutType}_${workoutData.duration}`;
+        
+        // Check if this workout already exists
+        const existingWorkoutIndex = this.workouts.findIndex(w => {
+            const existingKey = `${w.data.date}_${w.data.workoutType}_${w.data.duration}`;
+            return existingKey === workoutKey;
+        });
+
         const workout = {
             id: Date.now(),
             timestamp: new Date().toISOString(),
@@ -360,7 +372,17 @@ class FitnessAnalyzer {
             insights: insights
         };
 
-        this.workouts.push(workout);
+        if (existingWorkoutIndex !== -1) {
+            // Replace existing workout with updated data
+            this.workouts[existingWorkoutIndex] = workout;
+            console.log('Updated existing workout:', workoutData.date, workoutData.workoutType);
+            this.showInfo(`Updated existing workout from ${workoutData.date}`);
+        } else {
+            // Add new workout
+            this.workouts.push(workout);
+            console.log('Added new workout:', workoutData.date, workoutData.workoutType);
+        }
+
         localStorage.setItem("fitnessWorkouts", JSON.stringify(this.workouts));
     }
 
@@ -388,7 +410,13 @@ class FitnessAnalyzer {
 
         recentWorkouts.forEach(workout => {
             const workoutDiv = document.createElement("div");
-            workoutDiv.className = "workout-history-item";
+            workoutDiv.className = "workout-history-item clickable";
+            workoutDiv.style.cursor = "pointer";
+            
+            // Add click handler to load workout data
+            workoutDiv.addEventListener('click', () => {
+                this.loadWorkoutData(workout);
+            });
 
             const date = new Date(workout.timestamp).toLocaleDateString();
             const data = workout.data;
@@ -404,6 +432,7 @@ class FitnessAnalyzer {
                     <div>${data.avgHeartRate || "--"} BPM</div>
                     <div>${data.totalCalories || "--"} CAL</div>
                 </div>
+                <div class="click-indicator">👆 Click to view</div>
             `;
 
             historyContainer.appendChild(workoutDiv);
@@ -422,6 +451,119 @@ class FitnessAnalyzer {
 
     hideError() {
         document.getElementById("errorSection").style.display = "none";
+    }
+
+    showInfo(message) {
+        // Create or update info section for positive feedback
+        let infoSection = document.getElementById("infoSection");
+        if (!infoSection) {
+            infoSection = document.createElement("div");
+            infoSection.id = "infoSection";
+            infoSection.className = "info";
+            infoSection.style.cssText = `
+                background: #e8f5e8;
+                color: #2d5f2d;
+                padding: 15px;
+                border-radius: 10px;
+                margin: 10px 0;
+                border: 1px solid #a8d4a8;
+                display: none;
+            `;
+            document.getElementById("errorSection").after(infoSection);
+        }
+        
+        infoSection.textContent = message;
+        infoSection.style.display = "block";
+        
+        // Auto-hide after 3 seconds
+        setTimeout(() => {
+            infoSection.style.display = "none";
+        }, 3000);
+    }
+
+    loadWorkoutData(workout) {
+        // Load the selected workout data into the main UI
+        this.displayResults(workout.data, workout.insights);
+        
+        // Update the results section title to indicate it's historical data
+        const resultsTitle = document.querySelector("#resultsSection h2");
+        const date = new Date(workout.timestamp).toLocaleDateString();
+        resultsTitle.textContent = `Workout Analysis - ${date}`;
+        
+        // Add a reset button to return to current analysis mode
+        this.addResetButton();
+        
+        // Scroll to results section
+        document.getElementById("resultsSection").scrollIntoView({ 
+            behavior: "smooth", 
+            block: "start" 
+        });
+    }
+
+    addResetButton() {
+        // Remove existing reset button if it exists
+        const existingResetBtn = document.getElementById("resetToCurrentBtn");
+        if (existingResetBtn) {
+            existingResetBtn.remove();
+        }
+
+        // Create new reset button
+        const resetBtn = document.createElement("button");
+        resetBtn.id = "resetToCurrentBtn";
+        resetBtn.className = "reset-btn";
+        resetBtn.textContent = "← Back to Current Analysis";
+        resetBtn.style.cssText = `
+            margin: 10px 0;
+            padding: 8px 16px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        `;
+        
+        resetBtn.addEventListener('click', () => {
+            this.resetToCurrentAnalysis();
+        });
+
+        // Insert the reset button after the results title
+        const resultsSection = document.getElementById("resultsSection");
+        const resultsTitle = resultsSection.querySelector("h2");
+        resultsTitle.after(resetBtn);
+    }
+
+    resetToCurrentAnalysis() {
+        // Reset the results section title
+        const resultsTitle = document.querySelector("#resultsSection h2");
+        resultsTitle.textContent = "Current Workout Analysis";
+        
+        // Remove the reset button
+        const resetBtn = document.getElementById("resetToCurrentBtn");
+        if (resetBtn) {
+            resetBtn.remove();
+        }
+        
+        // Clear the results section or hide it if no current analysis exists
+        const hasCurrentData = this.uploadedImages.image1 || this.uploadedImages.image2;
+        if (!hasCurrentData) {
+            // Clear all data displays
+            document.getElementById("workoutTime").textContent = "--";
+            document.getElementById("avgHeartRate").textContent = "--";
+            document.getElementById("totalCalories").textContent = "--";
+            document.getElementById("activeCalories").textContent = "--";
+            document.getElementById("heartRateZones").innerHTML = "";
+            document.getElementById("insightsContainer").innerHTML = "";
+            
+            // You could also hide the results section entirely
+            // document.getElementById("resultsSection").style.display = "none";
+        }
+        
+        // Scroll back to upload section
+        document.querySelector(".upload-section").scrollIntoView({ 
+            behavior: "smooth", 
+            block: "start" 
+        });
     }
 }
 

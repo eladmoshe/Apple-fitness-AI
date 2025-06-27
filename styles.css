@@ -320,6 +320,33 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.workout-history-item.clickable:hover {
+    background: #e9ecef;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.workout-history-item.clickable {
+    cursor: pointer;
+}
+
+.click-indicator {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.8rem;
+    color: #667eea;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.workout-history-item.clickable:hover .click-indicator {
+    opacity: 1;
 }
 
 .workout-date {

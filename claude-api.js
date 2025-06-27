@@ -7,17 +7,16 @@ class ClaudeAPI {
         this.baseURL = 'https://api.anthropic.com/v1/messages';
     }
 
-    async analyzeScreenshots(heartRateImage, summaryImage) {
+    async analyzeScreenshots(image1, image2) {
         const prompt = `
-Please analyze these two Apple Fitness screenshots and extract comprehensive workout data in JSON format.
+Please analyze these two Apple Fitness screenshots. First, identify which is the 'Heart Rate View' (contains detailed heart rate zones, chart, and metrics) and which is the 'Summary View' (contains overall workout stats like duration and calories). Then, extract comprehensive workout data into a single JSON object.
 
-IMAGE 1: Heart Rate View - Contains detailed heart rate information, zones, and heart rate chart
-IMAGE 2: Summary View - Contains workout duration, calories, and basic metrics
+IMPORTANT: Extract the ACTUAL workout date from the screenshots - look for date information displayed in the interface. Do NOT use today's date.
 
 Extract the following data structure:
 {
     "workoutType": "string (e.g., Functional Strength Training)",
-    "date": "YYYY-MM-DD format",
+    "date": "YYYY-MM-DD format (MUST be extracted from screenshot, not today's date)",
     "duration": "MM:SS or HH:MM:SS format",
     "avgHeartRate": "number (BPM)",
     "maxHeartRate": "number (BPM if visible)",
@@ -46,8 +45,8 @@ Extract the following data structure:
     "effort": "string (if visible on summary)"
 }
 
-Combine information from both screenshots for the most complete data.
-If a value is not visible in either screenshot, use null.
+Combine information from both identified screenshots for the most complete data. If a value is not visible in either screenshot, use null.
+Pay special attention to extracting the correct workout date from the screenshot interface.
 Respond ONLY with valid JSON. Do not include any explanation or markdown formatting.
 `;
 
@@ -106,31 +105,40 @@ Respond ONLY with valid JSON. Do not include any explanation or markdown formatt
 
     async generateInsights(workoutData, workoutHistory) {
         const prompt = `
-Based on this current workout data and workout history, provide insights and trends analysis.
+You are a world-class AI fitness coach. Your goal is to provide fresh, data-driven, and highly personalized insights based on a user's workout data. Avoid generic advice.
 
-Current Workout:
+Analyze the provided current workout and the user's recent workout history.
+
+Current Workout Data:
 ${JSON.stringify(workoutData, null, 2)}
 
-Recent Workout History:
+Recent Workout History (last 5 sessions):
 ${JSON.stringify(workoutHistory, null, 2)}
 
-Please provide insights in JSON format:
+Generate a detailed analysis in the following JSON format. Ensure each insight is directly tied to the provided data.
+
 {
-    "performanceInsights": ["insight1", "insight2", "insight3"],
-    "trends": ["trend1", "trend2"],
-    "recommendations": ["recommendation1", "recommendation2"],
-    "comparisons": ["comparison1", "comparison2"]
+    "performanceInsights": [
+        "A specific, data-backed insight about the user's performance in this session.",
+        "Another unique observation about their heart rate, zones, or calorie burn.",
+        "A third, distinct point about their effort or recovery during this workout."
+    ],
+    "trends": [
+        "Identify a positive or negative trend by comparing this workout to their history. Be specific (e.g., 'Your average heart rate has decreased by 5 BPM for similar workouts over the last 3 sessions, indicating improved efficiency.').",
+        "Note another trend related to duration, intensity, or recovery."
+    ],
+    "recommendations": [
+        "A concrete, actionable recommendation for their next workout based on this session's data.",
+        "A suggestion for long-term improvement based on observed trends.",
+        "A specific tip to optimize their performance, like adjusting warm-up or trying a new workout type."
+    ],
+    "comparisons": [
+        "Compare this workout to their average, highlighting a key difference (e.g., 'This session's calorie burn was 15% higher than your average for strength training.').",
+        "Provide another comparison, perhaps about time spent in different heart rate zones."
+    ]
 }
 
-Focus on:
-- Heart rate trends and efficiency
-- Calorie burn patterns
-- Workout intensity analysis
-- Progress indicators
-- Recovery insights
-- Performance comparisons with previous workouts
-
-Respond ONLY with valid JSON.
+Respond ONLY with valid JSON. Do not include any explanation or markdown formatting. Be insightful and encouraging.
 `;
 
         try {
