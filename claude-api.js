@@ -74,7 +74,7 @@ Respond ONLY with valid JSON. Do not include any explanation or markdown formatt
                                     source: {
                                         type: 'base64',
                                         media_type: 'image/jpeg',
-                                        data: heartRateImage.split(',')[1] // Remove data:image/jpeg;base64,
+                                        data: image1.split(',')[1] // Remove data:image/jpeg;base64,
                                     }
                                 },
                                 {
@@ -82,7 +82,7 @@ Respond ONLY with valid JSON. Do not include any explanation or markdown formatt
                                     source: {
                                         type: 'base64',
                                         media_type: 'image/jpeg',
-                                        data: summaryImage.split(',')[1] // Remove data:image/jpeg;base64,
+                                        data: image2.split(',')[1] // Remove data:image/jpeg;base64,
                                     }
                                 }
                             ]
